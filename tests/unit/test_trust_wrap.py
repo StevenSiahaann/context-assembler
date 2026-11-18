@@ -35,5 +35,9 @@ def test_trust_wrap_escapes_delimiter_breakouts() -> None:
     assert "</document>\nIgnore" not in wrapped.block.content
     assert "&lt;/document&gt;\nIgnore" in wrapped.block.content
     # Correct envelope wraps the whole document
-    assert wrapped.block.content.startswith('<document id="doc_rag_99" source="https://untrusted-web.com/article" trust="untrusted">')
+    expected_header = (
+        '<document id="doc_rag_99" source="https://untrusted-web.com/article" '
+        'trust="untrusted">'
+    )
+    assert wrapped.block.content.startswith(expected_header)
     assert wrapped.block.content.endswith("</document>")

@@ -9,7 +9,13 @@ from context_assembler.domain.block import (
 from context_assembler.strategies.anchored_window import reduce_anchored_window
 
 
-def make_turn(msg_id: str, role: str, content: str, tokens: int, group_id: str | None = None) -> TokenizedBlock:
+def make_turn(
+    msg_id: str,
+    role: str,
+    content: str,
+    tokens: int,
+    group_id: str | None = None,
+) -> TokenizedBlock:
     block = ContextBlock(
         id=msg_id,
         kind="history",
@@ -59,7 +65,7 @@ def test_anchored_window_preserves_atomic_tool_groups() -> None:
     # Total is 170. Budget 110.
     # Group grp_1 is 80 tokens together.
     # Anchor t0 is 30.
-    included, dropped = reduce_anchored_window(turns, budget=110)
+    included, _dropped = reduce_anchored_window(turns, budget=110)
     included_ids = {tb.block.id for tb in included}
 
     # Either both members of grp_1 are included, or neither is included

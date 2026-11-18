@@ -317,7 +317,7 @@ class Assembler:
         selected_tokens = [*p0_blocks, *included_p1, *included_dynamic]
         ordered, prefix_hash, prefix_tokens = order_blocks_for_caching(selected_tokens)
 
-        # 10. Structure normalization (applied on ordered sequence to guarantee first chat turn is user)
+        # 10. Structure normalization (guarantees first chat turn is user)
         normalized = normalize_message_structure(
             ordered,
             requires_alternation=self._model.requires_alternation,

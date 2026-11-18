@@ -50,6 +50,8 @@ def test_cached_tokenizer_thread_safety() -> None:
 def test_tiktoken_special_token_handling() -> None:
     # Special tokens must not trigger DisallowedSpecial exception
     tokenizer = TiktokenTokenizer("o200k_base")
-    sample_text = "Here is an untrusted user prompt containing <|endoftext|> and <|fim_prefix|> markers."
+    sample_text = (
+        "Here is an untrusted user prompt containing <|endoftext|> and <|fim_prefix|> markers."
+    )
     tokens = tokenizer.count(sample_text)
     assert tokens > 0

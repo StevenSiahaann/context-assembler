@@ -44,7 +44,9 @@ def sample_blocks_200() -> list[ContextBlock]:
                 id=f"rag_doc_{i}",
                 kind="rag",
                 role="user",
-                content=f"Document {i} discusses schema architecture, UUIDv7, and index optimization.",
+                content=(
+                    f"Document {i} discusses schema architecture, UUIDv7, and index optimization."
+                ),
                 priority=Priority.P3,
                 strategy=Drop(),
                 score=i / 100.0,
