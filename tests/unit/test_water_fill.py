@@ -54,4 +54,3 @@ def test_water_fill_zero_budget() -> None:
     }
     alloc = water_fill(budget=0, demand={"rag": 500}, policy=policy, order=["rag"])
     assert alloc["rag"] == 0
-

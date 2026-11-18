@@ -58,4 +58,3 @@ class AssemblyReport:
     warnings: tuple[str, ...]
     decisions: tuple[BlockDecision, ...]
     duration_ms: float
-

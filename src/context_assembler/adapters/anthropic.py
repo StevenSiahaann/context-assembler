@@ -30,30 +30,40 @@ def to_anthropic_payload(
             content_parts: list[dict[str, Any]] = []
             if b.content:
                 content_parts.append({"type": "text", "text": b.content})
-            content_parts.append({
-                "type": "tool_use",
-                "id": b.group_id,
-                "name": b.source or "tool",
-                "input": {},
-            })
-            messages.append({
-                "role": "assistant",
-                "content": content_parts,
-            })
+            content_parts.append(
+                {
+                    "type": "tool_use",
+                    "id": b.group_id,
+                    "name": b.source or "tool",
+                    "input": {},
+                }
+            )
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": content_parts,
+                }
+            )
         elif b.kind == "tool_result" and b.group_id:
-            messages.append({
-                "role": "user",
-                "content": [{
-                    "type": "tool_result",
-                    "tool_use_id": b.group_id,
-                    "content": b.content,
-                }],
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": b.group_id,
+                            "content": b.content,
+                        }
+                    ],
+                }
+            )
         else:
-            messages.append({
-                "role": b.role,
-                "content": b.content,
-            })
+            messages.append(
+                {
+                    "role": b.role,
+                    "content": b.content,
+                }
+            )
 
     result: dict[str, Any] = {"messages": messages}
     if system_parts:

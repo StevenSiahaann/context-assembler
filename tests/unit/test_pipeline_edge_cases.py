@@ -194,3 +194,127 @@ def test_dedup_and_supersession_preserve_history_repeats() -> None:
     assert "rag_high" in by_id and "rag_low" not in by_id
     assert "superseded by later read" in by_id["read_old"].content
     assert by_id["read_new"].content == "new file content v2"
+
+
+def test_hysteresis_epoch_eviction_stabilizes_history_prefix_across_turns() -> None:
+    """Epoch-chunked eviction keeps the first post-anchor turn stable across multiple turns."""
+    tokenizer = HeuristicTokenizer(chars_per_token=1.0)
+    model = ModelProfile(
+        context_window=600,
+        max_output_tokens=100,
+        per_message_overhead=0,
+        safety_margin_ratio=0.0,
+    )
+
+    # Compare 1-by-1 eviction (low_watermark_ratio=1.0) vs epoch hysteresis (0.65)
+    asm_no_hyst = Assembler(
+        model=model,
+        tokenizer=tokenizer,
+        slots=[
+            SlotPolicy("history", min_tokens=100, max_tokens=200, weight=1, low_watermark_ratio=1.0)
+        ],
+    )
+    asm_hyst = Assembler(
+        model=model,
+        tokenizer=tokenizer,
+        slots=[
+            SlotPolicy(
+                "history", min_tokens=100, max_tokens=200, weight=1, low_watermark_ratio=0.65
+            )
+        ],
+    )
+
+    history: list[ContextBlock] = []
+    shifts_no_hyst = 0
+    shifts_hyst = 0
+    prev_first_post_anchor_no_hyst: str | None = None
+    prev_first_post_anchor_hyst: str | None = None
+
+    for turn_idx in range(16):
+        role = "user" if turn_idx % 2 == 0 else "assistant"
+        history.append(
+            ContextBlock(
+                id=f"turn_{turn_idx}",
+                kind="history",
+                role=role,
+                content="M" * 20,
+                priority=Priority.P4,
+                strategy=Drop(),
+                seq=turn_idx,
+            )
+        )
+        active = ContextBlock("active_q", "user", "user", "Q" * 10, Priority.P1, Never())
+
+        res_no = asm_no_hyst.assemble([*history, active])
+        res_hy = asm_hyst.assemble([*history, active])
+
+        hist_no = [b.id for b in res_no.blocks if b.kind == "history"]
+        hist_hy = [b.id for b in res_hy.blocks if b.kind == "history"]
+
+        if len(hist_no) > 1:
+            if (
+                prev_first_post_anchor_no_hyst is not None
+                and hist_no[1] != prev_first_post_anchor_no_hyst
+            ):
+                shifts_no_hyst += 1
+            prev_first_post_anchor_no_hyst = hist_no[1]
+
+        if len(hist_hy) > 1:
+            if (
+                prev_first_post_anchor_hyst is not None
+                and hist_hy[1] != prev_first_post_anchor_hyst
+            ):
+                shifts_hyst += 1
+            prev_first_post_anchor_hyst = hist_hy[1]
+
+    # Hysteresis must cause strictly fewer prefix boundary shifts than 1-by-1 eviction
+    assert shifts_hyst < shifts_no_hyst
+
+
+def test_two_phase_plan_api_for_budget_aware_retrieval() -> None:
+    tokenizer = HeuristicTokenizer(chars_per_token=1.0)
+    model = ModelProfile(
+        context_window=2_000,
+        max_output_tokens=400,
+        per_message_overhead=4,
+        safety_margin_ratio=0.05,
+    )
+    assembler = Assembler(
+        model=model,
+        tokenizer=tokenizer,
+        slots=[
+            SlotPolicy("rag", min_tokens=200, max_tokens=800, weight=3),
+            SlotPolicy("history", min_tokens=100, max_tokens=600, weight=1),
+        ],
+    )
+
+    fixed = [
+        ContextBlock("sys", "system", "system", "S" * 100, Priority.P0, Never()),
+        ContextBlock("usr", "user", "user", "U" * 50, Priority.P1, Never()),
+    ]
+
+    budget_plan = assembler.plan(fixed, demand={"history": 200}, estimated_messages=10)
+    assert budget_plan.p0_tokens == 100
+    assert budget_plan.p1_tokens == 50
+    assert budget_plan.slot_allocations["rag"] > 0
+
+    top_k = budget_plan.recommended_top_k("rag", avg_chunk_tokens=100)
+    assert top_k == budget_plan.slot_allocations["rag"] // 100
+
+    # Fetch only top_k distinct chunks and assemble using the pre-computed plan
+    rag_chunks = [
+        ContextBlock(
+            id=f"chunk_{i}",
+            kind="rag",
+            role="user",
+            content=f"Chunk_{i:02d}_" + ("C" * 80),
+            priority=Priority.P3,
+            strategy=Drop(),
+            score=1.0 - i * 0.1,
+        )
+        for i in range(top_k)
+    ]
+    res = assembler.assemble([*fixed, *rag_chunks], plan=budget_plan)
+    assert res.report.total_tokens <= res.report.input_budget
+    included_rag = [b for b in res.blocks if b.kind == "rag"]
+    assert len(included_rag) == top_k

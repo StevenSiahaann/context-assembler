@@ -24,4 +24,3 @@ class Tokenizer(Protocol):
         Default implementation counts line-by-line, but custom adapters can optimize.
         """
         ...
-

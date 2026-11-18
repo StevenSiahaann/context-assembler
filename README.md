@@ -24,6 +24,8 @@ Most LLM frameworks handle context limits using **naive sliding windows** (dropp
 
 * **Zero Overflow Invariant:** Mathematically guarantees prompt token counts never exceed available input budget (verified via Hypothesis property testing).
 * **Priority-Based Water-Filling:** Fairly partitions dynamic capacity across competing slots (`rag`, `history`, `tool_result`, `memory`) with guaranteed floors and proportional surplus sharing.
+* **Two-Phase Budget-Aware Retrieval (`assembler.plan()`):** Computes per-slot token budgets and recommended `top_k` *before* querying Vector DBs or rerankers.
+* **Epoch-Chunked Hysteresis Eviction:** Prevents prompt-cache thrashing across multi-turn sessions by evicting oldest post-anchor history in fixed forward epochs (`low_watermark_ratio`), cutting multi-turn input token costs by ~51%.
 * **Atomic Group Preservation:** Tool calls and their corresponding execution outputs are never separated during eviction.
 * **Cache-Aware Layout:** Groups static instructions and tool definitions at the prefix to maximize provider prompt caching discounts (up to 90% cost reduction).
 * **Sub-Millisecond Speed:** Assembles 200 blocks in **~0.40 ms** (12x faster than the 5ms latency budget).
@@ -121,13 +123,41 @@ messages = to_openai_messages(result.blocks)
 
 ---
 
-## Benchmark Results
+## Benchmark & Evaluation Results
 
-Benchmarked on Apple Silicon (M-series) using `pytest-benchmark` over 2,000 iterations:
+### 1. Latency Benchmark (`pytest-benchmark`)
+
+Benchmarked on Apple Silicon (M-series) over 2,000 iterations:
 
 | Scenario | Candidate Size | Resulting Latency | Status |
 | :--- | :--- | :--- | :--- |
 | **Full Assembly (200 Blocks)** | 100 RAG Docs + 98 History Turns + System & User | **0.40 ms** | PASS (< 5.0 ms target) |
+
+### 2. Quality & Ablation Evaluation (`eval/run_eval.py`)
+
+Evaluated across 45 scenarios spanning 3 suites (*Long Multi-Turn Goal Retention*, *Tool-Heavy Log Needle Recall*, and *Distractor-Heavy RAG Grounding*):
+
+| Method | Needle Recall (%) | 95% Bootstrap CI | API Protocol Valid (%) |
+| :--- | :---: | :---: | :---: |
+| `naive_truncate` | 33.3% | `[26.7%, 40.0%]` | 100.0% |
+| `sliding_window` | 50.0% | `[37.8%, 62.2%]` | 33.3% |
+| `assembler_no_headtail` *(ablation)* | 66.7% | `[51.1%, 80.0%]` | 100.0% |
+| **`context_assembler_v0.2`** | **100.0%** | **`[100.0%, 100.0%]`** | **100.0%** |
+
+### 3. 20-Turn Agent Prompt Cache & Cost Simulation
+
+Simulates a 20-turn coding agent session with KV prefix caching ($3.00/1M uncached, $0.30/1M cached):
+
+| Eviction Policy | KV Cache Hit Rate | Effective Cost / 1K Turns |
+| :--- | :---: | :---: |
+| `sliding_window` (1-by-1 shift) | 51.8% | \$1.1890 |
+| `assembler_no_hysteresis` (`low_watermark=1.0`) | 51.8% | \$1.1481 |
+| **`assembler_v0.2` (`low_watermark=0.65`)** | **79.3%** | **\$0.5845 (-50.8%)** |
+
+Reproduce locally with:
+```bash
+.venv/bin/python eval/run_eval.py
+```
 
 ---
 

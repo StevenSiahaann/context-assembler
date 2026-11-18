@@ -65,6 +65,7 @@ ignore = []
 "tests/*" = ["T201", "B011"]
 "benchmarks/*" = ["T201"]
 "examples/*" = ["T201"]
+"eval/*" = ["T201"]
 
 [tool.pyright]
 include = ["src", "tests"]

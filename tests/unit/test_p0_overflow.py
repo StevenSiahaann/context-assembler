@@ -41,4 +41,3 @@ def test_p0_overflow_raises_typed_exception_with_exact_deficit() -> None:
     assert err.required == 400
     assert err.available < 400
     assert "P0 blocks require 400 tokens" in str(err)
-

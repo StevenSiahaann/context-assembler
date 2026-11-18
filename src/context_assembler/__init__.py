@@ -33,6 +33,7 @@ from context_assembler.observability.report import (
     BlockDecision,
     SlotUsage,
 )
+from context_assembler.planning.budget_planner import BudgetPlan
 from context_assembler.tokenizers.base import Tokenizer
 from context_assembler.tokenizers.cached import CachedTokenizer
 from context_assembler.tokenizers.heuristic import HeuristicTokenizer
@@ -46,6 +47,7 @@ __all__ = [
     "AssemblyReport",
     "BlockDecision",
     "BlockKind",
+    "BudgetPlan",
     "CachedTokenizer",
     "ContextBlock",
     "Drop",

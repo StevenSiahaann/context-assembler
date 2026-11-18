@@ -81,4 +81,3 @@ def test_anthropic_adapter_separates_system_and_adds_cache_control() -> None:
 
     # Messages array must only contain the user turn
     assert payload["messages"] == [{"role": "user", "content": "Hello"}]
-

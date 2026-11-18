@@ -20,22 +20,26 @@ from context_assembler.domain.budget import ModelProfile
 from context_assembler.domain.errors import P0OverflowError
 from context_assembler.tokenizers.heuristic import HeuristicTokenizer
 
-strategy_kinds: st.SearchStrategy[BlockKind] = st.sampled_from([
-    "system",
-    "tool_schema",
-    "user",
-    "memory",
-    "rag",
-    "history",
-])
+strategy_kinds: st.SearchStrategy[BlockKind] = st.sampled_from(
+    [
+        "system",
+        "tool_schema",
+        "user",
+        "memory",
+        "rag",
+        "history",
+    ]
+)
 
-strategy_priorities: st.SearchStrategy[Priority] = st.sampled_from([
-    Priority.P0,
-    Priority.P1,
-    Priority.P2,
-    Priority.P3,
-    Priority.P4,
-])
+strategy_priorities: st.SearchStrategy[Priority] = st.sampled_from(
+    [
+        Priority.P0,
+        Priority.P1,
+        Priority.P2,
+        Priority.P3,
+        Priority.P4,
+    ]
+)
 
 
 def block_strategy_mapper(kind: BlockKind, priority: Priority) -> ReductionStrategy:

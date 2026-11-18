@@ -122,10 +122,7 @@ class ContextBlock:
         if not self.id.strip():
             raise InvalidBlockError(self.id, "Block ID cannot be empty.")
 
-        if (
-            isinstance(self.strategy, HeadTail)
-            and not (0.0 < self.strategy.head_ratio < 1.0)
-        ):
+        if isinstance(self.strategy, HeadTail) and not (0.0 < self.strategy.head_ratio < 1.0):
             raise InvalidBlockError(
                 self.id,
                 f"head_ratio must be strictly between 0 and 1, got {self.strategy.head_ratio}",

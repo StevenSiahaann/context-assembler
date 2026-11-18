@@ -26,11 +26,7 @@ def format_untrusted_envelope(block: ContextBlock, inner_content: str) -> str:
 
     sanitized = inner_content.replace(_CLOSE_TAG, "&lt;/document&gt;")
     source_attr = f' source="{block.source}"' if block.source else ""
-    return (
-        f'<document id="{block.id}"{source_attr} trust="untrusted">\n'
-        f"{sanitized}\n"
-        f"{_CLOSE_TAG}"
-    )
+    return f'<document id="{block.id}"{source_attr} trust="untrusted">\n{sanitized}\n{_CLOSE_TAG}'
 
 
 def strip_untrusted_envelope(block: ContextBlock, content: str) -> str:

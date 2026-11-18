@@ -54,4 +54,3 @@ def test_head_tail_returns_none_if_budget_too_small() -> None:
     # Budget of only 5 tokens is smaller than the omission marker itself
     result = reduce_head_tail(tblock, budget=5, tokenizer=tokenizer)
     assert result is None
-

@@ -1,0 +1,50 @@
+{
+  "benchmark_suites": {
+    "naive_truncate": {
+      "needle_recall_pct": 33.3,
+      "ci_95": [
+        26.7,
+        40.0
+      ],
+      "protocol_valid_pct": 100.0
+    },
+    "sliding_window": {
+      "needle_recall_pct": 50.0,
+      "ci_95": [
+        37.8,
+        62.2
+      ],
+      "protocol_valid_pct": 33.3
+    },
+    "assembler_no_headtail": {
+      "needle_recall_pct": 66.7,
+      "ci_95": [
+        51.1,
+        80.0
+      ],
+      "protocol_valid_pct": 100.0
+    },
+    "context_assembler_v0.2": {
+      "needle_recall_pct": 100.0,
+      "ci_95": [
+        100.0,
+        100.0
+      ],
+      "protocol_valid_pct": 100.0
+    }
+  },
+  "cache_simulation": {
+    "sliding_window": {
+      "cache_hit_pct": 51.8,
+      "cost_per_1k_turns_usd": 1.189
+    },
+    "assembler_no_hysteresis": {
+      "cache_hit_pct": 51.8,
+      "cost_per_1k_turns_usd": 1.1481
+    },
+    "assembler_v0.2": {
+      "cache_hit_pct": 79.3,
+      "cost_per_1k_turns_usd": 0.5845
+    }
+  }
+}

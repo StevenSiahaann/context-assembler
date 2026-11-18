@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from context_assembler.allocation.water_fill import water_fill
@@ -27,7 +27,7 @@ from context_assembler.observability.report import (
     SlotUsage,
 )
 from context_assembler.ordering.cache_aware import order_blocks_for_caching
-from context_assembler.planning.budget_planner import calculate_input_budget
+from context_assembler.planning.budget_planner import BudgetPlan, calculate_input_budget
 from context_assembler.preprocess.dedup import (
     apply_supersession,
     deduplicate_exact,
@@ -83,9 +83,7 @@ class Assembler:
     def _tokenize(self, block: ContextBlock) -> TokenizedBlock:
         wrapped_content = format_untrusted_envelope(block, block.content)
         target_block = (
-            replace(block, content=wrapped_content)
-            if wrapped_content != block.content
-            else block
+            replace(block, content=wrapped_content) if wrapped_content != block.content else block
         )
         if target_block.fixed_tokens is not None:
             return TokenizedBlock(target_block, target_block.fixed_tokens)
@@ -111,7 +109,77 @@ class Assembler:
             return "history"
         return next(iter(self._slot_policies))
 
-    def assemble(self, raw_blocks: Sequence[ContextBlock]) -> AssembledContext:
+    def _slot_order(self) -> list[str]:
+        preferred_order = ("tool_result", "rag", "memory", "history")
+        order = [k for k in preferred_order if k in self._slot_policies]
+        for k in self._slot_policies:
+            if k not in order:
+                order.append(k)
+        return order
+
+    def plan(
+        self,
+        fixed_blocks: Sequence[ContextBlock],
+        demand: Mapping[str, int] | None = None,
+        estimated_messages: int = 16,
+    ) -> BudgetPlan:
+        """Computes a two-phase slot budget plan prior to fetching RAG or history.
+
+        Allows callers to query `plan.slot_allocations['rag']` or
+        `plan.recommended_top_k('rag')` before running expensive retrieval.
+        """
+        tokenized = [self._tokenize(b) for b in fixed_blocks]
+        tool_count = sum(1 for tb in tokenized if tb.block.kind == "tool_schema")
+        msg_estimate = max(len(tokenized), estimated_messages)
+        planned = calculate_input_budget(
+            self._model,
+            estimated_messages=msg_estimate,
+            tool_count=tool_count,
+        )
+        input_budget = planned.input_budget
+        merge_reserve = msg_estimate if self._model.requires_alternation else 0
+        usable_budget = max(0, input_budget - merge_reserve)
+
+        p0_blocks = [tb for tb in tokenized if tb.block.priority == Priority.P0 or tb.block.pinned]
+        p0_total = sum(tb.tokens for tb in p0_blocks)
+        if p0_total > usable_budget:
+            raise P0OverflowError(required=p0_total, available=input_budget)
+
+        p0_ids = {id(tb) for tb in p0_blocks}
+        p1_blocks = [
+            tb for tb in tokenized if tb.block.priority == Priority.P1 and id(tb) not in p0_ids
+        ]
+        p1_total = min(usable_budget - p0_total, sum(tb.tokens for tb in p1_blocks))
+        remaining = max(0, usable_budget - p0_total - p1_total)
+
+        slot_order = self._slot_order()
+        effective_demand = {
+            k: (
+                demand[k]
+                if demand is not None and k in demand
+                else self._slot_policies[k].max_tokens
+            )
+            for k in slot_order
+        }
+        allocations = water_fill(
+            budget=remaining,
+            demand=effective_demand,
+            policy=self._slot_policies,
+            order=slot_order,
+        )
+        return BudgetPlan(
+            input_budget=input_budget,
+            p0_tokens=p0_total,
+            p1_tokens=p1_total,
+            remaining_for_slots=remaining,
+            slot_allocations=allocations,
+        )
+
+    def assemble(
+        self,
+        raw_blocks: Sequence[ContextBlock],
+        plan: BudgetPlan | None = None,
+    ) -> AssembledContext:
         """Assembles prompt context within budget constraints.
 
         Guarantees:
@@ -217,9 +285,7 @@ class Assembler:
                     )
                 else:
                     action = (
-                        "needs_summary"
-                        if isinstance(tb.block.strategy, Summarize)
-                        else "dropped"
+                        "needs_summary" if isinstance(tb.block.strategy, Summarize) else "dropped"
                     )
                     decisions_by_id[tb.block.id] = BlockDecision(
                         block_id=tb.block.id,
@@ -231,9 +297,7 @@ class Assembler:
 
         # 7. Partition remaining budget across dynamic slots via water-filling
         dynamic_candidates = [
-            tb
-            for tb in tokenized
-            if id(tb) not in p0_id_set and id(tb) not in p1_id_set
+            tb for tb in tokenized if id(tb) not in p0_id_set and id(tb) not in p1_id_set
         ]
         demand_per_slot: dict[str, int] = defaultdict(int)
         blocks_by_slot: dict[str, list[TokenizedBlock]] = defaultdict(list)
@@ -243,18 +307,36 @@ class Assembler:
             demand_per_slot[slot_kind] += tb.tokens
             blocks_by_slot[slot_kind].append(tb)
 
-        preferred_order = ("tool_result", "rag", "memory", "history")
-        slot_order = [k for k in preferred_order if k in self._slot_policies]
-        for k in self._slot_policies:
-            if k not in slot_order:
-                slot_order.append(k)
+        slot_order = self._slot_order()
 
-        allocation = water_fill(
-            budget=budget_remaining,
-            demand=demand_per_slot,
-            policy=self._slot_policies,
-            order=slot_order,
-        )
+        if plan is not None and sum(plan.slot_allocations.values()) <= budget_remaining:
+            allocation = {
+                k: min(plan.slot_allocations.get(k, 0), demand_per_slot.get(k, 0))
+                for k in slot_order
+            }
+            slack = budget_remaining - sum(allocation.values())
+            if slack > 0:
+                extra_demand = {
+                    k: max(0, demand_per_slot.get(k, 0) - allocation.get(k, 0)) for k in slot_order
+                }
+                extra_alloc = water_fill(
+                    budget=slack,
+                    demand=extra_demand,
+                    policy=self._slot_policies,
+                    order=slot_order,
+                )
+                for k in slot_order:
+                    allocation[k] = min(
+                        self._slot_policies[k].max_tokens,
+                        allocation[k] + extra_alloc.get(k, 0),
+                    )
+        else:
+            allocation = water_fill(
+                budget=budget_remaining,
+                demand=demand_per_slot,
+                policy=self._slot_policies,
+                order=slot_order,
+            )
 
         slot_usage: dict[str, SlotUsage] = {}
         included_dynamic: list[TokenizedBlock] = []
@@ -314,7 +396,12 @@ class Assembler:
                             reason="lower_score",
                         )
             else:
-                inc, drp = reduce_anchored_window(cands, slot_budget)
+                low_wm = self._slot_policies[kind].low_watermark_ratio
+                inc, drp = reduce_anchored_window(
+                    cands,
+                    slot_budget,
+                    low_watermark_ratio=low_wm,
+                )
                 for tb in inc:
                     included_dynamic.append(tb)
                     spent_in_slot += tb.tokens
@@ -466,7 +553,7 @@ class Assembler:
                 continue
 
             rem_for_results = rem - call_cost
-            fitted_results: list[ tuple[TokenizedBlock, TokenizedBlock, bool] ] = []
+            fitted_results: list[tuple[TokenizedBlock, TokenizedBlock, bool]] = []
             group_fits = True
 
             for r in results:

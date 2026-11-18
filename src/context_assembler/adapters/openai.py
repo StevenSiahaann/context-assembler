@@ -19,30 +19,36 @@ def to_openai_messages(
         role = system_role if b.role in ("system", "developer") else b.role
 
         if b.kind == "tool_call" and b.group_id:
-            messages.append({
-                "role": "assistant",
-                "content": b.content,
-                "tool_calls": [
-                    {
-                        "id": b.group_id,
-                        "type": "function",
-                        "function": {
-                            "name": b.source or "tool",
-                            "arguments": "{}",
-                        },
-                    }
-                ],
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": b.content,
+                    "tool_calls": [
+                        {
+                            "id": b.group_id,
+                            "type": "function",
+                            "function": {
+                                "name": b.source or "tool",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                }
+            )
         elif b.kind == "tool_result" and b.group_id:
-            messages.append({
-                "role": "tool",
-                "tool_call_id": b.group_id,
-                "content": b.content,
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": b.group_id,
+                    "content": b.content,
+                }
+            )
         else:
-            messages.append({
-                "role": role,
-                "content": b.content,
-            })
+            messages.append(
+                {
+                    "role": role,
+                    "content": b.content,
+                }
+            )
 
     return messages

@@ -23,6 +23,7 @@ class SlotPolicy:
     min_tokens: int
     max_tokens: int
     weight: int = 1
+    low_watermark_ratio: float = 0.75
 
     def __post_init__(self) -> None:
         if self.min_tokens < 0:
@@ -34,6 +35,10 @@ class SlotPolicy:
             )
         if self.weight <= 0:
             raise ValueError(f"weight must be strictly positive, got {self.weight}")
+        if not 0.1 <= self.low_watermark_ratio <= 1.0:
+            raise ValueError(
+                f"low_watermark_ratio must be in [0.1, 1.0], got {self.low_watermark_ratio}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
