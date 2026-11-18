@@ -1,6 +1,6 @@
 # Context Assembler Engine
 
-[![CI](https://github.com/stevengianmarg/context-assembler/actions/workflows/ci.yml/badge.svg)](https://github.com/stevengianmarg/context-assembler)
+[![CI](https://github.com/StevenSiahaann/context-assembler/actions/workflows/ci.yml/badge.svg)](https://github.com/StevenSiahaann/context-assembler)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](pyproject.toml)
 [![Type Checked](https://img.shields.io/badge/pyright-strict-green.svg)](pyproject.toml)

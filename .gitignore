@@ -11,3 +11,12 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+
+# Environment & credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*.json
+.secrets*
