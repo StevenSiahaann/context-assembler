@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Literal
+from typing import Any, Literal
 
 from context_assembler.domain.errors import InvalidBlockError
 
@@ -100,6 +101,8 @@ class ContextBlock:
         supersedes_key: State key where only the newest sequence version is kept.
         pinned: If true, block cannot be dropped unless P0 overflows.
         fixed_tokens: Explicit token count override (useful for pre-computed tokens).
+        tool_name: Optional function/tool identifier for tool_call and tool_result blocks.
+        tool_input: Optional structured arguments or JSON string for tool_call blocks.
     """
 
     id: str
@@ -117,6 +120,8 @@ class ContextBlock:
     supersedes_key: str | None = None
     pinned: bool = False
     fixed_tokens: int | None = None
+    tool_name: str | None = None
+    tool_input: Mapping[str, Any] | str | None = None
 
     def __post_init__(self) -> None:
         if not self.id.strip():

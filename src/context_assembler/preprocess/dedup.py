@@ -1,4 +1,4 @@
-"""Deduplication and state supersession preprocessing."""
+"""Deduplication, state supersession, and age-based tool observation masking."""
 
 from __future__ import annotations
 
@@ -34,7 +34,6 @@ def deduplicate_exact(blocks: Sequence[ContextBlock]) -> list[ContextBlock]:
 
         h = hashlib.blake2b(b.content.encode("utf-8"), digest_size=16).digest()
         if h in seen:
-            # Keep whichever version has higher relevance score (or higher priority)
             prev = seen[h]
             if (int(b.priority), -b.score) < (int(prev.priority), -prev.score):
                 seen[h] = b
@@ -69,5 +68,48 @@ def apply_supersession(blocks: Sequence[ContextBlock]) -> list[ContextBlock]:
                 result.append(replace(b, content=stub))
                 continue
         result.append(b)
+
+    return result
+
+
+def apply_observation_masking(
+    blocks: Sequence[ContextBlock],
+    keep_recent_turns: int | None = None,
+    epoch_stride: int = 1,
+) -> list[ContextBlock]:
+    """Masks bulky tool_result observations older than `keep_recent_turns`.
+
+    Inspired by SWE-agent's `LastNObservations` and OpenHands' `ObservationMaskingCondenser`,
+    enhanced with `epoch_stride` snapping so the masking boundary only advances every
+    `epoch_stride` turns rather than invalidating the KV prompt cache on every step.
+    """
+    if keep_recent_turns is None or keep_recent_turns < 0 or not blocks:
+        return list(blocks)
+
+    max_seq = max((b.seq for b in blocks), default=0)
+    raw_cutoff = max_seq - keep_recent_turns
+    if raw_cutoff <= 0:
+        return list(blocks)
+
+    stride = max(1, epoch_stride)
+    cutoff_seq = ((raw_cutoff - 1) // stride + 1) * stride if stride > 1 else raw_cutoff
+
+    result: list[ContextBlock] = []
+    for b in blocks:
+        if (
+            b.kind == "tool_result"
+            and not b.pinned
+            and b.priority != Priority.P0
+            and b.seq < cutoff_seq
+            and len(b.content) > 120
+        ):
+            line_count = max(1, len(b.content.splitlines()))
+            stub = (
+                f"[Old tool observation from turn {b.seq} masked "
+                f"({line_count} lines); re-run tool if needed]"
+            )
+            result.append(replace(b, content=stub))
+        else:
+            result.append(b)
 
     return result
