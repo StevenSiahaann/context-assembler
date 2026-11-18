@@ -1,0 +1,81 @@
+[project]
+name = "context-assembler"
+version = "0.1.0"
+description = "Deterministic, priority-based token budgeting and context assembly engine for LLMs"
+readme = "README.md"
+authors = [
+    { name = "Steven Gianmarg Haposan Siahaan", email = "stevensiahaan25@gmail.com" }
+]
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+openai = ["tiktoken>=0.8.0"]
+otel = ["opentelemetry-api>=1.27.0"]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.115.0",
+    "pytest>=8.3.0",
+    "pytest-benchmark>=5.1.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.0",
+    "pyright>=1.1.389",
+    "syrupy>=4.7.2",
+    "tiktoken>=0.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/context_assembler"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific rules
+    "T20", # disallow print() in library code
+]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["T201", "B011"]
+"benchmarks/*" = ["T201"]
+"examples/*" = ["T201"]
+
+[tool.pyright]
+include = ["src", "tests"]
+typeCheckingMode = "strict"
+pythonVersion = "3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "unit: fast unit tests",
+    "property: hypothesis property tests",
+    "benchmark: performance benchmarks",
+]
