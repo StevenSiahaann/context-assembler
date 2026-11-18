@@ -15,3 +15,4 @@ Modern LLM APIs (Anthropic, OpenAI, DeepSeek, Google Gemini) offer significant c
 ## Consequences
 - Maximizes prompt cache hit rates across multi-turn agent sessions.
 - Keeps RAG context near the final user question, mitigating "lost-in-the-middle" attention degradation.
+

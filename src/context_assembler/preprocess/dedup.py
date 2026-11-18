@@ -6,26 +6,37 @@ import hashlib
 from collections.abc import Sequence
 from dataclasses import replace
 
-from context_assembler.domain.block import ContextBlock
+from context_assembler.domain.block import ContextBlock, Priority
 
 
 def deduplicate_exact(blocks: Sequence[ContextBlock]) -> list[ContextBlock]:
-    """Removes identical duplicate blocks, retaining the one with highest score."""
+    """Removes identical duplicate RAG/memory blocks, retaining the highest score.
+
+    Conversation history, system instructions, user queries, and grouped tool blocks
+    are never deduplicated by content hash since repeated phrases (e.g. "OK") are
+    valid chronological turns.
+    """
     seen: dict[bytes, ContextBlock] = {}
     ordered_hashes: list[bytes] = []
 
-    for b in blocks:
-        # P0 blocks and user prompts are never deduplicated
-        if b.kind in ("system", "tool_schema", "user") or b.group_id is not None:
-            h = f"unique:{b.id}".encode()
+    for i, b in enumerate(blocks):
+        is_dedup_candidate = (
+            b.kind in ("rag", "memory")
+            and b.group_id is None
+            and not b.pinned
+            and b.priority != Priority.P0
+        )
+        if not is_dedup_candidate:
+            h = f"unique:{i}:{b.id}".encode()
             seen[h] = b
             ordered_hashes.append(h)
             continue
 
         h = hashlib.blake2b(b.content.encode("utf-8"), digest_size=16).digest()
         if h in seen:
-            # Keep whichever version has higher relevance score
-            if b.score > seen[h].score:
+            # Keep whichever version has higher relevance score (or higher priority)
+            prev = seen[h]
+            if (int(b.priority), -b.score) < (int(prev.priority), -prev.score):
                 seen[h] = b
         else:
             seen[h] = b
@@ -54,7 +65,6 @@ def apply_supersession(blocks: Sequence[ContextBlock]) -> list[ContextBlock]:
         if b.supersedes_key:
             latest = latest_seq_per_key[b.supersedes_key]
             if b.seq < latest:
-                # Replace with placeholder stub
                 stub = f"[Content superseded by later read of key: {b.supersedes_key}]"
                 result.append(replace(b, content=stub))
                 continue

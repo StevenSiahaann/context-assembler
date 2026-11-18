@@ -48,3 +48,4 @@ def reduce_drop_lowest(
             dropped.append(tb)
 
     return included, dropped
+

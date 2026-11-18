@@ -59,3 +59,4 @@ def calculate_input_budget(
         framing_overhead=framing_overhead,
         input_budget=input_budget,
     )
+

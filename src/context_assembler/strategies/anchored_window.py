@@ -71,3 +71,4 @@ def reduce_anchored_window(
     dropped = [tb for tb in history_blocks if tb.block.id not in included_set]
 
     return included, dropped
+

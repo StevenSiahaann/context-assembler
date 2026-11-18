@@ -15,3 +15,4 @@ Context Assembler Engine requires high-performance token counting, deterministic
 ## Consequences
 - Fast CI pipeline (< 2s test suite).
 - Clean dependency boundary for external enterprise adoption.
+

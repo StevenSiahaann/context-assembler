@@ -15,3 +15,4 @@ We implement a two-phase **water-filling** allocation algorithm across dynamic s
 ## Consequences
 - Guaranteed baseline capacity for both RAG context and conversational history.
 - Mathematically bounded execution terminating in $\le S$ iterations (where $S$ is number of slots $\le 10$).
+

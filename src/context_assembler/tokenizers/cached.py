@@ -66,3 +66,4 @@ class CachedTokenizer:
     def count_lines(self, lines: list[str]) -> list[int]:
         # Delegate individual lines so frequent repeating lines hit cache
         return [self.count(line) for line in lines]
+

@@ -55,3 +55,4 @@ class StructuralValidityError(AssemblyError):
         super().__init__(f"Structural validity rule {rule!r} violated: {detail}")
         self.rule = rule
         self.detail = detail
+

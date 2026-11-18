@@ -26,6 +26,20 @@ def to_anthropic_payload(
             if enable_cache_control and b.cacheable:
                 part["cache_control"] = {"type": "ephemeral"}
             system_parts.append(part)
+        elif b.kind == "tool_call" and b.group_id:
+            content_parts: list[dict[str, Any]] = []
+            if b.content:
+                content_parts.append({"type": "text", "text": b.content})
+            content_parts.append({
+                "type": "tool_use",
+                "id": b.group_id,
+                "name": b.source or "tool",
+                "input": {},
+            })
+            messages.append({
+                "role": "assistant",
+                "content": content_parts,
+            })
         elif b.kind == "tool_result" and b.group_id:
             messages.append({
                 "role": "user",

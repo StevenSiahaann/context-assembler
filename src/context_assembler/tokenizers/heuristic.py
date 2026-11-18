@@ -29,3 +29,4 @@ class HeuristicTokenizer:
 
     def count_lines(self, lines: list[str]) -> list[int]:
         return [self.count(line) for line in lines]
+

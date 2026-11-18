@@ -14,3 +14,4 @@ When an LLM executes a tool, the provider records an `assistant` message contain
 ## Consequences
 - Guaranteed API protocol validity under context trimming.
 - Agent loops remain coherent because tool execution history is never partially orphaned.
+

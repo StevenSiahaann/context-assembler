@@ -15,3 +15,4 @@ Different LLM providers utilize distinct BPE tokenizer vocabularies (e.g. OpenAI
 ## Consequences
 - Zero-downtime tolerance for tokenizer drift.
 - Fast caching with safe memory boundaries.
+

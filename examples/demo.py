@@ -8,8 +8,6 @@ Simulates a real-world scenario with:
 5. Multi-turn Chat History -> Middle turns dropped, Turn 0 preserved
 """
 
-import json
-
 from context_assembler import (
     Assembler,
     CachedTokenizer,
@@ -114,9 +112,21 @@ def run_demo() -> None:
 
     # P3: RAG Documents (3 documents, varying scores)
     rag_articles = [
-        ("rag_index_b_tree", "B-Tree indexing on foreign keys accelerates single-tenant lookups.", 0.95),
-        ("rag_vacuum_tuning", "Aggressive autovacuum parameters prevent table bloat on updates.", 0.70),
-        ("rag_history_trivia", "PostgreSQL was originally called Postgres created in 1986 at UC Berkeley.", 0.15),
+        (
+            "rag_index_b_tree",
+            "B-Tree indexing on foreign keys accelerates single-tenant lookups.",
+            0.95,
+        ),
+        (
+            "rag_vacuum_tuning",
+            "Aggressive autovacuum parameters prevent table bloat on updates.",
+            0.70,
+        ),
+        (
+            "rag_history_trivia",
+            "PostgreSQL was originally called Postgres created in 1986 at UC Berkeley.",
+            0.15,
+        ),
     ]
     for doc_id, text, score in rag_articles:
         blocks.append(
@@ -175,12 +185,18 @@ def run_demo() -> None:
 
     print("\n[Slot Capacity Breakdown]")
     for slot_name, usage in report.per_slot.items():
-        print(f"  • {slot_name:12s} -> Allocated: {usage.allocated:4d} | Used: {usage.used:4d} | Demand: {usage.demand:4d}")
+        print(
+            f"  • {slot_name:12s} -> Allocated: {usage.allocated:4d} | "
+            f"Used: {usage.used:4d} | Demand: {usage.demand:4d}"
+        )
 
     print("\n[Decisions Audit Log]")
     for d in report.decisions:
         status_icon = "✅" if d.action == "included" else ("✂️" if d.action == "truncated" else "❌")
-        print(f"  {status_icon} {d.block_id:22s} [{d.action:9s}] {d.tokens_before:4d} -> {d.tokens_after:4d} tokens ({d.reason})")
+        print(
+            f"  {status_icon} {d.block_id:22s} [{d.action:9s}] "
+            f"{d.tokens_before:4d} -> {d.tokens_after:4d} tokens ({d.reason})"
+        )
 
     # 4. View Formatted OpenAI Messages
     print("\n" + "=" * 70)
@@ -188,7 +204,9 @@ def run_demo() -> None:
     print("=" * 70)
     openai_payload = to_openai_messages(result.blocks)
     for i, msg in enumerate(openai_payload):
-        snippet = msg["content"][:100].replace("\n", " ") + ("..." if len(msg["content"]) > 100 else "")
+        raw_text = str(msg["content"])
+        suffix = "..." if len(raw_text) > 100 else ""
+        snippet = raw_text[:100].replace("\n", " ") + suffix
         role_label = f"[{msg['role'].upper()}]"
         print(f"{i + 1:02d}. {role_label:14s} {snippet}")
 

@@ -18,3 +18,4 @@ Callers can selectively intercept `P0OverflowError` to truncate system prompts o
 ## Consequences
 - Idiomatic Python usage without monadic unwrap boilerplate.
 - Rich error attributes for automated retry and telemetry logging.
+
