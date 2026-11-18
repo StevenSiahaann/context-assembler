@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import json
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from context_assembler.domain.block import ContextBlock
+
+
+def _serialize_tool_arguments(tool_input: Mapping[str, Any] | str | None) -> str:
+    if tool_input is None:
+        return "{}"
+    if isinstance(tool_input, str):
+        return tool_input
+    return json.dumps(dict(tool_input), sort_keys=True, separators=(",", ":"))
 
 
 def to_openai_messages(
@@ -28,8 +37,8 @@ def to_openai_messages(
                             "id": b.group_id,
                             "type": "function",
                             "function": {
-                                "name": b.source or "tool",
-                                "arguments": "{}",
+                                "name": b.tool_name or b.source or "tool",
+                                "arguments": _serialize_tool_arguments(b.tool_input),
                             },
                         }
                     ],

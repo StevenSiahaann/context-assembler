@@ -29,6 +29,7 @@ from context_assembler.observability.report import (
 from context_assembler.ordering.cache_aware import order_blocks_for_caching
 from context_assembler.planning.budget_planner import BudgetPlan, calculate_input_budget
 from context_assembler.preprocess.dedup import (
+    apply_observation_masking,
     apply_supersession,
     deduplicate_exact,
 )
@@ -37,7 +38,7 @@ from context_assembler.security.trust_wrap import format_untrusted_envelope
 from context_assembler.strategies.alternatives import reduce_alternatives
 from context_assembler.strategies.anchored_window import reduce_anchored_window
 from context_assembler.strategies.drop_lowest import reduce_drop_lowest
-from context_assembler.strategies.head_tail import reduce_head_tail
+from context_assembler.strategies.head_tail import reduce_head_tail, reduce_middle_out
 from context_assembler.structure.normalize import normalize_message_structure
 from context_assembler.structure.validators import validate_assembled_structure
 from context_assembler.tokenizers.base import Tokenizer
@@ -59,9 +60,13 @@ class Assembler:
         model: ModelProfile,
         tokenizer: Tokenizer,
         slots: Sequence[SlotPolicy] | None = None,
+        keep_recent_tool_turns: int | None = None,
+        observation_epoch_stride: int = 1,
     ) -> None:
         self._model = model
         self._tokenizer = tokenizer
+        self._keep_recent_tool_turns = keep_recent_tool_turns
+        self._observation_epoch_stride = observation_epoch_stride
         self._slot_policies: dict[str, SlotPolicy] = {
             s.kind: s
             for s in (
@@ -93,8 +98,10 @@ class Assembler:
     def _reduce_single(self, tb: TokenizedBlock, budget: int) -> TokenizedBlock | None:
         """Applies block-level reduction strategy to fit within budget."""
         strat = tb.block.strategy
-        if isinstance(strat, (HeadTail, MiddleOut)):
+        if isinstance(strat, HeadTail):
             return reduce_head_tail(tb, budget, self._tokenizer)
+        if isinstance(strat, MiddleOut):
+            return reduce_middle_out(tb, budget, self._tokenizer)
         if isinstance(strat, Alternatives):
             return reduce_alternatives(tb, budget, self._tokenizer)
         return None
@@ -207,15 +214,20 @@ class Assembler:
                 )
 
         superseded = apply_supersession(deduped)
+        masked = apply_observation_masking(
+            superseded,
+            keep_recent_turns=self._keep_recent_tool_turns,
+            epoch_stride=self._observation_epoch_stride,
+        )
         superseded_ids: set[str] = {
-            s.id for d, s in zip(deduped, superseded, strict=True) if d.content != s.content
+            m.id for d, m in zip(deduped, masked, strict=True) if d.content != m.content
         }
 
         # 2. Invariant: Validate atomic pairing
-        validate_atomic_groups(superseded)
+        validate_atomic_groups(masked)
 
         # 3. Tokenize candidate blocks (includes untrusted <document> wrapper tokens)
-        tokenized = [self._tokenize(b) for b in superseded]
+        tokenized = [self._tokenize(b) for b in masked]
 
         # 4. Budget planning
         tool_count = sum(1 for b in tokenized if b.block.kind == "tool_schema")
@@ -341,8 +353,8 @@ class Assembler:
         slot_usage: dict[str, SlotUsage] = {}
         included_dynamic: list[TokenizedBlock] = []
 
-        # 8. Apply per-slot reduction strategies
-        for kind in slot_order:
+        # 8. Apply per-slot reduction strategies with cross-slot slack redistribution
+        for idx, kind in enumerate(slot_order):
             slot_budget = allocation.get(kind, 0)
             cands = blocks_by_slot.get(kind, [])
             spent_in_slot = 0
@@ -427,6 +439,17 @@ class Assembler:
                 demand=demand_per_slot.get(kind, 0),
             )
 
+            # Recycle unused internal fragmentation slack to subsequent unfulfilled slots
+            unused_slack = max(0, slot_budget - spent_in_slot)
+            remaining_slots = slot_order[idx + 1 :]
+            if unused_slack > 0 and remaining_slots:
+                self._redistribute_slack(
+                    slack=unused_slack,
+                    remaining_slots=remaining_slots,
+                    allocation=allocation,
+                    demand=demand_per_slot,
+                )
+
         # 9. Cache-aware ordering: prefix -> history & tool pairs -> rag -> active user
         selected_tokens = [*p0_blocks, *included_p1, *included_dynamic]
         ordered, prefix_hash, prefix_tokens = order_blocks_for_caching(selected_tokens)
@@ -482,6 +505,41 @@ class Assembler:
             blocks=[tb.block for tb in normalized],
             report=report,
         )
+
+    def _redistribute_slack(
+        self,
+        slack: int,
+        remaining_slots: Sequence[str],
+        allocation: dict[str, int],
+        demand: Mapping[str, int],
+    ) -> None:
+        """Redistributes unused slot tokens to downstream slots with unmet demand."""
+        headroom: dict[str, int] = {}
+        sub_policies: dict[str, SlotPolicy] = {}
+        for rk in remaining_slots:
+            pol = self._slot_policies[rk]
+            cap = min(pol.max_tokens, demand.get(rk, 0))
+            need = max(0, cap - allocation.get(rk, 0))
+            headroom[rk] = need
+            sub_policies[rk] = SlotPolicy(
+                kind=pol.kind,
+                min_tokens=0,
+                max_tokens=need,
+                weight=pol.weight,
+                low_watermark_ratio=pol.low_watermark_ratio,
+            )
+
+        if sum(headroom.values()) <= 0:
+            return
+
+        bonus = water_fill(
+            budget=slack,
+            demand=headroom,
+            policy=sub_policies,
+            order=remaining_slots,
+        )
+        for rk, extra in bonus.items():
+            allocation[rk] = allocation.get(rk, 0) + extra
 
     def _reduce_tool_slot(
         self,
